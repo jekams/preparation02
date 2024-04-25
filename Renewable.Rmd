@@ -1,0 +1,146 @@
+---
+title: "Statistical Modeling project"
+description: |
+  This is my statistical Modelling Project!
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Learn more about creating websites with Distill at:
+# https://rstudio.github.io/distill/website.html
+
+# Learn more about publishing to GitHub Pages at:
+# https://rstudio.github.io/distill/publish_website.html#github-pages
+
+```
+
+**In an era of increasing global concern over sustainability and climate change, the pursuit of renewable energy sources has become paramount for nations worldwide. This study delves into the renewable energy landscape of three diverse yet pivotal countries: Egypt, Algeria, and Argentina. By employing advanced statistical modeling techniques, we aim to analyze the current state, trends, and potential trajectories of renewable energy adoption in these nations.Through this exploration, we seek not only to understand the unique challenges and opportunities each country faces but also to offer insights that can inform policy decisions, 
+drive sustainable development, and pave the way towards a cleaner, more resilient energy future.**
+
+```{r}
+library(ggplot2)
+library(plotly)
+library(readr)
+library(knitr)
+library(dplyr)
+library(reshape)
+
+energy_data<- read_csv('modern-renewable-energy-consumption.csv')
+head(energy_data)
+str(energy_data) 
+
+```
+
+*I performed data cleaning and feature selection from my original data.*
+
+```{r}
+energy_data <- energy_data %>%dplyr:: rename(Other_Sources = `Other renewables (including geothermal and biomass) electricity generation - TWh`) %>%
+  select(-Code)
+selected_countries<- c('Algeria', 'Egypt', 'Argentina')
+sorted_data <- energy_data %>%
+  filter(Entity %in% selected_countries) %>%
+  select(Entity, Year, Other_Sources, `Solar generation - TWh`, `Wind generation - TWh`, `Hydro generation - TWh`)
+
+# now removing the missing data in the sorted data.
+
+sorted_data<- na.omit(sorted_data)
+write.csv(sorted_data, "sorted_data.csv", row.names = FALSE)
+
+
+```
+
+**Now that i have the dataset to use, I decided to perform exploratory analysis before determining if i need to do a modelling or perform linear regression.**
+
+```{r}
+glimpse(sorted_data) # Viewing the features of my dataset
+
+#perfomed statistical summary.
+summary(sorted_data)
+
+```
+
+**from the summary ambove , the dataset has 99 entries and 6 columns. The year range from 1990 to 2022, Other_Sources: Has a mean of \~0.31 with a standard deviation of \~0.59, indicating some variability and the presence of higher values since the max is 2.34. The mean solar generation is \~0.30 with a standard deviation of \~0.92. The maximum value is significantly higher (5.08) compared to the 75th percentile (0.04), suggesting a right-skewed distribution. Mean wind generation is \~0.90 with a wide range (std = \~2.37), maxing out at \~14.16 TWh. This also suggests variability and potential outliers on the higher end. Hydro generation - TWh: This is the largest source of renewable energy in your dataset, with a mean generation of \~13.85 and a maximum of \~38.02 TWh.**
+
+*\~I plotted heatmap to viausalize the corelation of these variables.*
+
+```{r}
+#computing the corelation matrix
+correlation_matrix <- cor(sorted_data[,c('Other_Sources', 'Solar generation - TWh', 'Wind generation - TWh', 'Hydro generation - TWh')])
+
+# Melt the correlation matrix for use with ggplot2
+melted_correlation_matrix <- melt(correlation_matrix)
+melted_correlation_matrix
+# Ctreating a Heatmap using the ggplot.
+
+ggplot(data = melted_correlation_matrix, aes(X1,X2)) +
+  geom_tile(aes(fill = value)) +
+  geom_text(aes(label = sprintf("%.2f", value)), color = "black", size = 4) +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "grey", midpoint = 0, limit = c(-1,1), space = "Lab", name="Pearson\nCorrelation") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, size = 12, hjust = 1),
+        axis.text.y = element_text(size = 12)) +
+  labs(title = "Correlation Heatmap of Energy Generation Types", x = "", y = "") +
+  coord_fixed()
+
+```
+
+```{r}
+```
+
+**from the above heatmap, we can clearly see that there's a moderate to low positive correlation among different types of renewable energy generation, with the strongest correlation being between Solar and Wind generation (0.61). Other Sources show a moderate positive correlation with Solar (0.49) and Wind (0.47) generation, and a weaker correlation with Hydro generation (0.26). Hydro generation shows relatively lower correlations with other renewable sources, which might be due to its broader use and availability compared to newer technologies like wind and solar.**
+
+*performed log transformation to further explore the relationships of my variables.*
+
+```{r}
+sorted_data$Log_Other_Sources <- log(sorted_data$Other_Sources + 1)
+sorted_data$Log_Solar <- log(sorted_data$`Solar generation - TWh` + 1)
+sorted_data$Log_Wind <- log(sorted_data$`Wind generation - TWh` + 1)
+sorted_data$Log_Hydro <- log(sorted_data$`Hydro generation - TWh` + 1)
+
+pairs(~ Log_Other_Sources + Log_Solar + Log_Wind + Log_Hydro, data = sorted_data)
+
+
+```
+
+```{r}
+fit <- lm(Log_Solar ~ Year + Log_Other_Sources + Log_Wind + Log_Hydro, data = sorted_data)
+summary(fit)
+```
+
+**Objective 1: Probability theory provides the language and tools for describing and analyzing the randomness inherent in the data and the models used to study them. in statistical models are mathematical representation of the real world which is full of randomness. By assuming certain measures in our data we can therefore be in a position to chose models, perform hypothesis testing and regression. In my data set i have performed several processes such as data cleaning, normalization, tranformation to be able to perform statistical analysis. MLE is a method used for estimating the parameters of a statistical model. It is based on the principle of selecting the parameter values that maximize the likelihood of the observed data under the model**
+
+*I am going to run a linear model to see if there is any variables that best fits the model.*
+
+```{r Linear model}
+fit <- lm(Log_Solar ~ Year + Log_Other_Sources + Log_Wind + Log_Hydro, data = sorted_data)
+plot(fit)
+
+plot(sorted_data$Year, sorted_data$Log_Solar, main = "Log_Solar vs. Year", xlab = "Year", ylab = "Log_Solar")
+abline(fit, col = "red")
+
+```
+
+**From the Linear model above all the assumptions for a lineat regression model are not met except for linearlity of residuals. the scatterplot shows the distribution of transformed values and therefore this is not the best model to use.**
+
+**Objective 2: Determine and apply the appropriate generalized linear model for a specific data context.**
+
+Most of my variables were not linearly correlated and therefore i decided to use the Genaralized Additive Model(GAM) as the model of choice.
+
+```{r}
+library(mgcv)
+gam_fit <- gam(Log_Solar ~ s(Year) + s(Log_Other_Sources) + s(Log_Wind) + s(Log_Hydro), data = sorted_data)
+summary(gam_fit)
+
+plot(gam_fit)
+
+
+```
+
+**Objective 4: Communicate the results of statistical models to a general audience**
+
+From the generalized additive model, The relationship between the predictors and the response variable is linear, meaning the expected value of Log_Solar is directly modeled as a linear combination of the predictors. Here the predictors are all the for variables. from the summary, 0.924 proportion of the solar energy is explained by other predictors after the adjustments. the R-squared of 93.7% suggests the model explains a large portion of the variance in the data.
+
+overall the model captures the relationship between Log_Solar and all the predictors, particularly for Year, Log_Other_Sources, and Log_Wind, through non-linear smooth functions, explaining a significant portion of the variance in Log_Solar. The non-significant relationship with Log_Hydro suggests it may not be as important in predicting Log_Solar as the other variables in this model.
